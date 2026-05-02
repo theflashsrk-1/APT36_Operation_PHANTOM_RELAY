@@ -1,10 +1,9 @@
 # APT36 Operation PHANTOM RELAY — Active Directory NTLM Relay & Delegation Cyber Range
 
-**Classification:** UNCLASSIFIED // EXERCISE ONLY
-**Domain Theme:** Critical Infrastructure — Indian Power Utility AD Environment (OPERATION GRIDFALL)
-**Network:** corp.prabalurja.in
-**Platform:** Windows Server 2019 — OpenStack / QEMU-KVM
-**Key CVE:** CVE-2025-33073 — NTLM Reflection (June 2025)
+**Classification:** UNCLASSIFIED // EXERCISE ONLY\
+**Domain Theme:** Critical Infrastructure — Indian Power Utility AD Environment (OPERATION GRIDFALL)\
+**Network:** corp.prabalurja.in\
+**Platform:** Windows Server 2019
 
 ---
 
@@ -216,20 +215,6 @@ impacket-secretsdump -k -no-pass 'corp.prabalurja.in/DC-CORPUL$@DC-CORPUL.corp.p
 5. M5-SRV-BASTION  — Join domain, DCOM, Unconstrained Delegation, Spooler
 6. M1-DC-CORPUL (again) — Post-join: Unconstrained Delegation, ACLs, GPO
 ```
-
----
-
-## OpenStack Network Assignment
-
-| Machine | Network | Key Ports |
-|---------|---------|-----------|
-| DC-CORPUL | lab-net | 53, 88, 135, 389, 636, 445 |
-| SRV-PORTAL | lab-net | 80 (IIS), 445 |
-| SRV-NAS | lab-net | 445 (SMB shares) |
-| SRV-CI | lab-net | 445, 5985 |
-| SRV-BASTION | lab-net | 135 (DCOM), 445, 3389, 5985 |
-
----
 
 ## APT36 Technique Mapping
 
