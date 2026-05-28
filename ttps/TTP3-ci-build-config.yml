@@ -1,4 +1,4 @@
-id: TTP3-ntlm-reflection
+id: TTP3-ci-build-config
 name: "PHANTOM RELAY: NTLM Reflection via CVE-2025-33073 for Local Privilege Escalation"
 description: >-
   Validates the build server security baseline on SRV-CI including patch compliance
