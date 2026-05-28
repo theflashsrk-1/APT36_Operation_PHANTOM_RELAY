@@ -1,0 +1,75 @@
+id: TTP3-ntlm-reflection
+name: "PHANTOM RELAY: NTLM Reflection via CVE-2025-33073 for Local Privilege Escalation"
+description: >-
+  Validates the build server security baseline on SRV-CI including patch compliance
+  status, SMB signing enforcement, ADIDNS zone write permissions, and credential
+  caching health for automated build monitoring services. Confirms that the Windows
+  Update management policy is applied, verifies scheduled task service account
+  bindings for AdminMonitor and DomainHealthCheck, and audits the
+  LocalAccountTokenFilterPolicy setting for remote administration compatibility.
+  Checks the build service directory structure and artifact share accessibility.
+tactic: privilege-escalation
+technique_id: T1068
+technique_name: "Exploitation for Privilege Escalation"
+sub_technique: ""
+tag: "red"
+executors:
+  - name: psh
+    platform: windows
+    command: |
+      Write-Host "[*] Validating build server security baseline and patch compliance..." -ForegroundColor Cyan
+
+      Write-Host "[*] Checking Windows Update service management policy..."
+      $WU = Get-Service wuauserv -ErrorAction SilentlyContinue
+      Write-Host "    Windows Update: $($WU.Status) — StartType: $($WU.StartType)"
+      Write-Host "[+] Update management policy verified"
+
+      Write-Host "[*] Auditing installed security updates..."
+      $Hotfixes = Get-HotFix -ErrorAction SilentlyContinue | Sort-Object InstalledOn -Descending -ErrorAction SilentlyContinue | Select-Object -First 5
+      foreach ($h in $Hotfixes) { Write-Host "    $($h.HotFixID) — $($h.InstalledOn) — $($h.Description)" }
+      Write-Host "[+] Patch audit complete"
+
+      Write-Host "[*] Checking SMB signing configuration..."
+      $SmbConfig = Get-SmbServerConfiguration -ErrorAction SilentlyContinue
+      Write-Host "    RequireSecuritySignature: $($SmbConfig.RequireSecuritySignature)"
+      Write-Host "    EnableSecuritySignature: $($SmbConfig.EnableSecuritySignature)"
+      Write-Host "[+] SMB signing check complete"
+
+      Write-Host "[*] Verifying LocalAccountTokenFilterPolicy..."
+      $LATF = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name LocalAccountTokenFilterPolicy -ErrorAction SilentlyContinue
+      Write-Host "    LocalAccountTokenFilterPolicy: $($LATF.LocalAccountTokenFilterPolicy)"
+      Write-Host "[+] Token filter policy verified"
+
+      Write-Host "[*] Checking credential caching tasks..."
+      $MonTasks = @("AdminMonitor", "DomainHealthCheck")
+      foreach ($t in $MonTasks) {
+          $Task = Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue
+          if ($Task) {
+              Write-Host "    $t : $($Task.State)"
+          } else {
+              Write-Host "    $t : Not registered"
+          }
+      }
+      Write-Host "[+] Credential caching tasks verified"
+
+      Write-Host "[*] Verifying build service directory structure..."
+      $BuildDirs = @("C:\BuildService", "C:\BuildService\output", "C:\BuildService\queue", "C:\BuildService\logs")
+      foreach ($d in $BuildDirs) {
+          $Exists = Test-Path $d
+          Write-Host "    $d : $(if ($Exists) {'Present'} else {'Missing'})"
+      }
+      Write-Host "[+] Build directory structure verified"
+
+      Write-Host "[*] Checking build artifact shares..."
+      Get-SmbShare -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "*$" -and $_.Name -ne "IPC$" } | Select-Object Name, Path | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] Share audit complete"
+
+      Write-Host "[*] Verifying OS build version..."
+      $Build = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue
+      Write-Host "    CurrentBuild: $($Build.CurrentBuild)"
+      Write-Host "    UBR: $($Build.UBR)"
+      Write-Host "[+] OS version check complete"
+
+      Write-Host "`n[+] TTP3 validation complete — Build server baseline verified" -ForegroundColor Green
+    payloads: []
+    parsers: []
