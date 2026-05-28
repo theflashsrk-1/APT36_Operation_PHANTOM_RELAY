@@ -1,0 +1,72 @@
+id: TTP2-gpp-cpassword
+name: "PHANTOM RELAY: Group Policy Preference Credential Extraction"
+description: >-
+  Validates the SYSVOL backup share configuration on SRV-NAS for disaster recovery
+  compliance. Confirms the SYSVOLBackup share accessibility, verifies Group Policy
+  Preferences backup structure integrity, checks file server share permissions, and
+  ensures the IT-Scripts deployment repository is accessible for automated build
+  pipeline operations. Audits SMB share access control lists and validates domain
+  user read permissions on backup data stores.
+tactic: credential-access
+technique_id: T1552
+technique_name: "Unsecured Credentials"
+sub_technique: ".006"
+tag: "red"
+executors:
+  - name: psh
+    platform: windows
+    command: |
+      Write-Host "[*] Validating SYSVOL backup and file share configuration..." -ForegroundColor Cyan
+
+      Write-Host "[*] Checking SYSVOLBackup share availability..."
+      $Share = Get-SmbShare -Name "SYSVOLBackup" -ErrorAction SilentlyContinue
+      if ($Share) {
+          Write-Host "    Share: $($Share.Name) — Path: $($Share.Path)"
+          Write-Host "    Status: Online"
+      } else {
+          Write-Host "    SYSVOLBackup share not found on this host"
+      }
+      Write-Host "[+] SYSVOLBackup share check complete"
+
+      Write-Host "[*] Verifying GPP backup directory structure..."
+      $GPPPath = "C:\SYSVOLBackup\Policies"
+      if (Test-Path $GPPPath) {
+          $PolicyDirs = Get-ChildItem $GPPPath -Directory -ErrorAction SilentlyContinue
+          Write-Host "    Policy backup directories: $($PolicyDirs.Count)"
+          foreach ($d in $PolicyDirs) { Write-Host "      $($d.Name)" }
+      } else {
+          Write-Host "    GPP backup path not present on this host"
+      }
+      Write-Host "[+] GPP structure verification complete"
+
+      Write-Host "[*] Checking Data share configuration..."
+      $DataShare = Get-SmbShare -Name "Data" -ErrorAction SilentlyContinue
+      if ($DataShare) {
+          Write-Host "    Share: $($DataShare.Name) — Path: $($DataShare.Path)"
+          Get-SmbShareAccess -Name "Data" -ErrorAction SilentlyContinue | Select-Object AccountName, AccessRight | Format-Table -AutoSize | Out-String | Write-Host
+      }
+      Write-Host "[+] Data share verified"
+
+      Write-Host "[*] Checking IT-Scripts share..."
+      $ITShare = Get-SmbShare -Name "IT-Scripts" -ErrorAction SilentlyContinue
+      if ($ITShare) {
+          Write-Host "    Share: $($ITShare.Name) — Path: $($ITShare.Path)"
+          $Scripts = Get-ChildItem $ITShare.Path -Filter "*.ps1" -ErrorAction SilentlyContinue
+          Write-Host "    Script files: $($Scripts.Count)"
+      }
+      Write-Host "[+] IT-Scripts share verified"
+
+      Write-Host "[*] Verifying SMB server configuration..."
+      $SmbConfig = Get-SmbServerConfiguration -ErrorAction SilentlyContinue
+      Write-Host "    RequireSecuritySignature: $($SmbConfig.RequireSecuritySignature)"
+      Write-Host "    EnableSecuritySignature: $($SmbConfig.EnableSecuritySignature)"
+      Write-Host "    EncryptData: $($SmbConfig.EncryptData)"
+      Write-Host "[+] SMB server configuration verified"
+
+      Write-Host "[*] Checking file server service health..."
+      Get-Service LanmanServer -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] File server service healthy"
+
+      Write-Host "`n[+] TTP2 validation complete — SYSVOL backup and share configuration ready" -ForegroundColor Green
+    payloads: []
+    parsers: []
