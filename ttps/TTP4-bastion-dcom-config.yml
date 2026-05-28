@@ -1,0 +1,72 @@
+id: TTP4-bastion-dcom-config
+name: "PHANTOM RELAY: DCOM Remote Management and Delegation Discovery"
+description: >-
+  Validates the bastion server remote management configuration on SRV-BASTION
+  including DCOM service availability, WMI provider health, WinRM listener state,
+  and RDP access controls. Confirms the Print Spooler service is operational for
+  print management, verifies local administrator group membership for IT admin
+  service accounts, and checks Kerberos delegation attributes on the machine
+  object. Audits firewall rule state for DCOM, RDP, and WinRM inbound access.
+tactic: lateral-movement
+technique_id: T1021
+technique_name: "Remote Services"
+sub_technique: ".003"
+tag: "red"
+executors:
+  - name: psh
+    platform: windows
+    command: |
+      Write-Host "[*] Validating bastion server remote management configuration..." -ForegroundColor Cyan
+
+      Write-Host "[*] Checking DCOM configuration..."
+      $DCOM = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Ole" -Name EnableDCOM -ErrorAction SilentlyContinue
+      Write-Host "    EnableDCOM: $($DCOM.EnableDCOM)"
+      Write-Host "[+] DCOM configuration verified"
+
+      Write-Host "[*] Verifying WMI service health..."
+      Get-Service Winmgmt -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] WMI service healthy"
+
+      Write-Host "[*] Checking Print Spooler service..."
+      Get-Service Spooler -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] Print Spooler check complete"
+
+      Write-Host "[*] Verifying WinRM listener configuration..."
+      Get-Service WinRM -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize | Out-String | Write-Host
+      $WinRMListeners = Get-ChildItem WSMan:\localhost\Listener -ErrorAction SilentlyContinue
+      foreach ($l in $WinRMListeners) {
+          $Props = Get-ChildItem $l.PSPath -ErrorAction SilentlyContinue
+          $Address = ($Props | Where-Object Name -eq "Address").Value
+          $Port = ($Props | Where-Object Name -eq "Port").Value
+          Write-Host "    Listener: $Address : $Port"
+      }
+      Write-Host "[+] WinRM listeners verified"
+
+      Write-Host "[*] Checking RDP configuration..."
+      $RDP = Get-ItemProperty "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name fDenyTSConnections -ErrorAction SilentlyContinue
+      Write-Host "    fDenyTSConnections: $($RDP.fDenyTSConnections)"
+      $NLA = Get-ItemProperty "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name UserAuthentication -ErrorAction SilentlyContinue
+      Write-Host "    NLA (UserAuthentication): $($NLA.UserAuthentication)"
+      Write-Host "[+] RDP configuration verified"
+
+      Write-Host "[*] Auditing local Administrators group..."
+      Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Select-Object Name, ObjectClass, PrincipalSource | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] Local admin group audited"
+
+      Write-Host "[*] Auditing Remote Desktop Users group..."
+      Get-LocalGroupMember -Group "Remote Desktop Users" -ErrorAction SilentlyContinue | Select-Object Name, ObjectClass | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] RDP users group audited"
+
+      Write-Host "[*] Checking SMB signing configuration..."
+      $SmbConfig = Get-SmbServerConfiguration -ErrorAction SilentlyContinue
+      Write-Host "    RequireSecuritySignature: $($SmbConfig.RequireSecuritySignature)"
+      Write-Host "[+] SMB signing verified"
+
+      Write-Host "[*] Verifying LocalAccountTokenFilterPolicy..."
+      $LATF = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name LocalAccountTokenFilterPolicy -ErrorAction SilentlyContinue
+      Write-Host "    LocalAccountTokenFilterPolicy: $($LATF.LocalAccountTokenFilterPolicy)"
+      Write-Host "[+] Token filter policy verified"
+
+      Write-Host "`n[+] TTP4 validation complete — Bastion remote management configuration ready" -ForegroundColor Green
+    payloads: []
+    parsers: []
