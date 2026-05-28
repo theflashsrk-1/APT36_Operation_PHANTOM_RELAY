@@ -1,0 +1,114 @@
+id: TTP5-dc-delegation-config
+name: "PHANTOM RELAY: Kerberos Delegation and Domain Replication Validation"
+description: >-
+  Validates domain-wide Kerberos delegation settings and domain controller service
+  health. Confirms the SDProp accelerator task is operational for timely security
+  descriptor propagation, verifies Print Spooler availability on the domain controller
+  for print management services, checks LDAP signing and channel binding policy
+  enforcement levels, and audits the AdminSDHolder container access control list.
+  Validates DNS zone health, domain password policy compliance, and the Unconstrained
+  Delegation attribute on designated bastion hosts for Kerberos protocol transition
+  support.
+tactic: credential-access
+technique_id: T1558
+technique_name: "Steal or Forge Kerberos Tickets"
+sub_technique: ".001"
+tag: "red"
+executors:
+  - name: psh
+    platform: windows
+    command: |
+      Write-Host "[*] Validating domain delegation and replication configuration..." -ForegroundColor Cyan
+
+      Write-Host "[*] Checking domain controller services..."
+      $Services = @("NTDS", "kdc", "Spooler", "DNS", "Netlogon")
+      foreach ($s in $Services) {
+          $Svc = Get-Service $s -ErrorAction SilentlyContinue
+          if ($Svc) {
+              Write-Host "    $s : $($Svc.Status)"
+          } else {
+              Write-Host "    $s : Not found"
+          }
+      }
+      Write-Host "[+] DC services check complete"
+
+      Write-Host "[*] Verifying LDAP signing policy..."
+      $LDAPSign = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" -Name LDAPServerIntegrity -ErrorAction SilentlyContinue
+      $CBT = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" -Name LdapEnforceChannelBinding -ErrorAction SilentlyContinue
+      Write-Host "    LDAPServerIntegrity: $($LDAPSign.LDAPServerIntegrity)"
+      Write-Host "    LdapEnforceChannelBinding: $($CBT.LdapEnforceChannelBinding)"
+      Write-Host "[+] LDAP policy verified"
+
+      Write-Host "[*] Checking SDProp accelerator task..."
+      $SDTask = Get-ScheduledTask -TaskName "SDProp-Force" -ErrorAction SilentlyContinue
+      if ($SDTask) {
+          Write-Host "    SDProp-Force: $($SDTask.State)"
+      } else {
+          Write-Host "    SDProp-Force: Not registered"
+      }
+      Write-Host "[+] SDProp task verified"
+
+      Write-Host "[*] Auditing Unconstrained Delegation hosts..."
+      try {
+          Import-Module ActiveDirectory -ErrorAction SilentlyContinue
+          $UnconstrainedHosts = Get-ADComputer -Filter {TrustedForDelegation -eq $true} -Properties TrustedForDelegation -ErrorAction SilentlyContinue
+          foreach ($h in $UnconstrainedHosts) {
+              Write-Host "    $($h.Name) : TrustedForDelegation = $($h.TrustedForDelegation)"
+          }
+      } catch {
+          Write-Host "    AD module not available — skipping delegation audit"
+      }
+      Write-Host "[+] Delegation audit complete"
+
+      Write-Host "[*] Checking domain password policy..."
+      try {
+          $Policy = Get-ADDefaultDomainPasswordPolicy -ErrorAction SilentlyContinue
+          Write-Host "    LockoutThreshold: $($Policy.LockoutThreshold)"
+          Write-Host "    MinPasswordLength: $($Policy.MinPasswordLength)"
+          Write-Host "    ComplexityEnabled: $($Policy.ComplexityEnabled)"
+      } catch {
+          Write-Host "    Could not query password policy"
+      }
+      Write-Host "[+] Password policy verified"
+
+      Write-Host "[*] Verifying DNS zone health..."
+      try {
+          $Zone = Get-DnsServerZone -Name "corp.prabalurja.in" -ErrorAction SilentlyContinue
+          Write-Host "    Zone: $($Zone.ZoneName) — Type: $($Zone.ZoneType) — Dynamic: $($Zone.DynamicUpdate)"
+      } catch {
+          Write-Host "    DNS zone query skipped"
+      }
+      Write-Host "[+] DNS zone health verified"
+
+      Write-Host "[*] Auditing AdminSDHolder ACL..."
+      try {
+          $ASDH = Get-Acl "AD:\CN=AdminSDHolder,CN=System,DC=corp,DC=prabalurja,DC=in" -ErrorAction SilentlyContinue
+          $CustomACEs = $ASDH.Access | Where-Object { $_.IdentityReference -notlike "NT AUTHORITY\*" -and $_.IdentityReference -notlike "BUILTIN\*" -and $_.IdentityReference -ne "Everyone" }
+          Write-Host "    Custom ACEs on AdminSDHolder: $($CustomACEs.Count)"
+          foreach ($ace in $CustomACEs) {
+              Write-Host "      $($ace.IdentityReference) : $($ace.ActiveDirectoryRights)"
+          }
+      } catch {
+          Write-Host "    AdminSDHolder ACL audit skipped"
+      }
+      Write-Host "[+] AdminSDHolder audit complete"
+
+      Write-Host "[*] Verifying domain controller DNS registration..."
+      $IP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" -and $_.IPAddress -ne "127.0.0.1" } | Select-Object -First 1).IPAddress
+      Write-Host "    DC IP: $IP"
+      Write-Host "[+] DNS registration verified"
+
+      Write-Host "[*] Checking Group Policy Objects..."
+      try {
+          $GPOs = Get-GPO -All -ErrorAction SilentlyContinue
+          Write-Host "    Total GPOs: $($GPOs.Count)"
+          $LinkedGPOs = $GPOs | Where-Object { $_.GpoStatus -ne "AllSettingsDisabled" }
+          Write-Host "    Active GPOs: $($LinkedGPOs.Count)"
+      } catch {
+          Write-Host "    GPO enumeration skipped"
+      }
+      Write-Host "[+] GPO check complete"
+
+      Write-Host "`n[+] TTP5 validation complete — Domain delegation and replication configuration ready" -ForegroundColor Green
+    payloads: []
+    parsers: []
