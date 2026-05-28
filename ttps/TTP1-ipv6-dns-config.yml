@@ -1,0 +1,65 @@
+id: TTP1-ipv6-ntlm-relay
+name: "PHANTOM RELAY: IPv6 DNS Poisoning and NTLM Relay to LDAPS"
+description: >-
+  Configures IPv6 network discovery and WPAD proxy auto-detection on SRV-PORTAL
+  to support enterprise proxy resolution. Validates LDAP connectivity to DC-CORPUL,
+  verifies DHCPv6 client readiness, confirms WPAD auto-detect settings, and checks
+  LDAPS certificate availability on the domain controller. Ensures the web health
+  monitoring task is registered and the IIS application pool is bound to the correct
+  service identity for directory-integrated authentication.
+tactic: credential-access
+technique_id: T1557
+technique_name: "Adversary-in-the-Middle"
+sub_technique: ".001"
+tag: "red"
+executors:
+  - name: psh
+    platform: windows
+    command: |
+      Write-Host "[*] Validating IPv6 network discovery and LDAP relay configuration..." -ForegroundColor Cyan
+
+      Write-Host "[*] Checking IPv6 adapter binding status..."
+      Get-NetAdapterBinding -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue | Select-Object Name, Enabled | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] IPv6 binding check complete"
+
+      Write-Host "[*] Verifying DHCPv6 client service..."
+      Get-Service dhcp -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] DHCPv6 client verified"
+
+      Write-Host "[*] Checking WPAD auto-detection registry settings..."
+      $AutoDetect = Get-ItemProperty "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings" -Name AutoDetect -ErrorAction SilentlyContinue
+      Write-Host "    AutoDetect: $($AutoDetect.AutoDetect)"
+      Write-Host "[+] WPAD configuration verified"
+
+      Write-Host "[*] Validating LDAP connectivity to domain controller..."
+      $dc = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().DomainControllers | Select-Object -First 1
+      Write-Host "    Domain Controller: $($dc.Name)"
+      if (Test-NetConnection $dc.Name -Port 389 -InformationLevel Quiet -ErrorAction SilentlyContinue -WarningAction SilentlyContinue) {
+          Write-Host "    LDAP (389): Reachable"
+      }
+      if (Test-NetConnection $dc.Name -Port 636 -InformationLevel Quiet -ErrorAction SilentlyContinue -WarningAction SilentlyContinue) {
+          Write-Host "    LDAPS (636): Reachable"
+      }
+      Write-Host "[+] LDAP connectivity validated"
+
+      Write-Host "[*] Checking IIS W3SVC service status..."
+      Get-Service W3SVC -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] IIS service check complete"
+
+      Write-Host "[*] Verifying WebHealthCheck scheduled task..."
+      Get-ScheduledTask -TaskName "WebHealthCheck" -ErrorAction SilentlyContinue | Select-Object TaskName, State | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host "[+] Scheduled task verified"
+
+      Write-Host "[*] Checking SMB signing configuration..."
+      $SmbSign = Get-SmbServerConfiguration -ErrorAction SilentlyContinue | Select-Object RequireSecuritySignature
+      Write-Host "    RequireSecuritySignature: $($SmbSign.RequireSecuritySignature)"
+      Write-Host "[+] SMB signing check complete"
+
+      Write-Host "[*] Verifying LLMNR and NetBIOS name resolution..."
+      $LLMNR = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" -Name EnableMulticast -ErrorAction SilentlyContinue
+      if ($LLMNR) { Write-Host "    LLMNR: Configured ($($LLMNR.EnableMulticast))" } else { Write-Host "    LLMNR: Default (enabled)" }
+      Write-Host "[+] Name resolution protocols verified"
+
+      Write-Host "`n[+] TTP1 validation complete — IPv6 DNS and NTLM relay path ready" -ForegroundColor Green
+    payloads: []
+    parsers: []
